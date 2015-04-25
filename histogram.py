@@ -1,6 +1,7 @@
 import getopt
 from hyphen import Hyphenator
 from hyphen import dictools
+import simplejson as json
 import sys
 
 
@@ -41,7 +42,9 @@ def by_syllable(input_file, hyphenator):
             yield syllable
 
 if __name__ == "__main__":
-    options, args = getopt.getopt(sys.argv[1:], "", ["input=", "lang=", "install", "syllables", "list"])
+    options, args = getopt.getopt(sys.argv[1:], "", ["input=", "output=",
+                                                     "lang=", "install",
+                                                     "syllables", "list"])
     options = dict(options)
 
     input_file = sys.stdin
@@ -78,3 +81,11 @@ if __name__ == "__main__":
 
     if "--list" in options:
         print("frequencies:   ", all_words)
+
+    if "--output" in options:
+        with open(options["--output"], "w") as out:
+            out.write(json.dumps({"all_lengths" : all_lengths,
+                                  "unique_lengths" : unique_lengths,
+                                  "all_words" : all_words},
+                                 sort_keys = True,
+                                 indent = 4 * " "))

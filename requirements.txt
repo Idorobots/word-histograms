@@ -1,1 +1,2 @@
 PyHyphen==2.0.5
+simplejson==3.6.5
