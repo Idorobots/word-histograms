@@ -41,7 +41,7 @@ def by_syllable(input_file, hyphenator):
             yield syllable
 
 if __name__ == "__main__":
-    options, args = getopt.getopt(sys.argv[1:], "", ["input=", "lang=", "install", "syllables"])
+    options, args = getopt.getopt(sys.argv[1:], "", ["input=", "lang=", "install", "syllables", "list"])
     options = dict(options)
 
     input_file = sys.stdin
@@ -66,6 +66,15 @@ if __name__ == "__main__":
         words = by_word(input_file)
 
     all_words, all_lengths, unique_lengths = compute_length_histograms(words)
-    print("frequencies:   ", all_words)
+
+    total = 0
+    for word in all_words:
+        total += all_words[word]
+
+    print("total words:   ", total)
+    print("unique words:  ", len(all_words))
     print("lengths:       ", all_lengths)
     print("unique lengths:", unique_lengths)
+
+    if "--list" in options:
+        print("frequencies:   ", all_words)
