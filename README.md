@@ -1,11 +1,12 @@
 Deps:
 
-```python
+```
 pip install -r requirements.txt
 ```
 
 Usage:
-```python
-python histogram.py --input file.txt --syllables --lang en_US --list
+```
+python histogram.py --syllables --lang en_US --output en.json --input input.txt --list
+python similarity.py --input input.txt --lang-file en.json
 ```
 
