@@ -41,19 +41,23 @@ def compute_similarity(a, b):
     return math.sqrt(coefficient)
 
 if __name__ == "__main__":
-    options, args = getopt.getopt(sys.argv[1:], "", ["input=", "lang-file="])
+    options, args = getopt.getopt(sys.argv[1:], "", ["input="])
     options = dict(options)
 
-    if "--lang-file" not in options:
-        raise Exception("A --lang-file is required!")
+    if len(args) == 0:
+        raise Exception("At least language file is required!")
 
     input_file = sys.stdin
 
     if "--input" in options:
         input_file = open(options["--input"])
 
-    _, all_lang, unique_lang = load_language_file(options["--lang-file"])
     _, all_text, unique_text = histogram.compute_length_histograms(histogram.by_word(input_file))
 
-    print("all lengths similarity:   ", compute_similarity(all_text, all_lang))
-    print("unique lengths similarity:", compute_similarity(unique_text, unique_lang))
+    f = "{:>30}{:>30}{:>30}"
+    print(f.format("language", "full similarity", "unique similarity"))
+    for lang in args:
+        _, all_lang, unique_lang = load_language_file(lang)
+        print(f.format(lang,
+                       compute_similarity(all_text, all_lang),
+                       compute_similarity(unique_text, unique_lang)))
