@@ -18,7 +18,17 @@ def value_or_0(d, key):
     except KeyError:
         return 0
 
+def normalize(d):
+    frequency_sum = 0
+    for k in d:
+        frequency_sum += d[k]
+
+    return {k: d[k]/frequency_sum for k in d}
+
 def compute_similarity(a, b):
+    a = normalize(a)
+    b = normalize(b)
+
     union = a.copy()
     union.update(b)
 
