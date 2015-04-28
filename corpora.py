@@ -25,7 +25,7 @@ class LangFiles(dict):
         try:
             return super(LangFiles, self).__getitem__(lang)
         except KeyError:
-            file = open(os.path.join(data_dir, lang.alpha3), 'a+')
+            file = open(os.path.join(output_dir, lang.alpha3), 'a+')
             self[lang] = file
             return file
 
@@ -97,11 +97,10 @@ def preprocess_tatoeba():
 
 
 if __name__ == "__main__":
-    options, args = getopt.getopt(sys.argv[1:], "", ["download=", "preprocess=", "debug"])
+    options, args = getopt.getopt(sys.argv[1:], "", ["download=", "preprocess=", "output=", "debug"])
     options = dict(options)
 
     corpora_dir = os.path.abspath(os.path.join(__file__, os.path.join(os.pardir, "corpora")))
-    data_dir = os.path.join(corpora_dir, "data")
     supported_corpora = Corpora(
         [("tatoeba", init(download_tatoeba, preprocess_tatoeba))]
     )
@@ -112,6 +111,11 @@ if __name__ == "__main__":
     else:
         logging.basicConfig(format=logging_format, level=logging.INFO)
 
+    if "--output" in options:
+        output_dir = options["--output"]
+    else:
+        output_dir = os.path.join(corpora_dir, "output")
+
     if "--download" in options:
         source = options["--download"]
         if source == "all":
@@ -121,10 +125,11 @@ if __name__ == "__main__":
             run(source, download_only=True, overwrite=True)
 
     if "--preprocess" in options:
-        shutil.rmtree(data_dir, ignore_errors=True)
+        if output_dir == os.path.join(corpora_dir, "output"):
+            shutil.rmtree(output_dir, ignore_errors=True)
         # nltk.download('punkt')
-        tokenizer = nltk.tokenize.WordPunctTokenizer()
-        os.makedirs(data_dir, exist_ok=True)
+        tokenizer = nltk.tokenize.RegexpTokenizer('\w+')
+        os.makedirs(output_dir, exist_ok=True)
         source = options["--preprocess"]
         if source == "all":
             for key in supported_corpora.keys():
