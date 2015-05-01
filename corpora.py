@@ -36,7 +36,7 @@ class LangFiles(dict):
         try:
             return super(LangFiles, self).__getitem__(lang)
         except KeyError:
-            f = open(os.path.join(self.output_dir, get_langname(lang)), 'w+')
+            f = open(os.path.join(self.output_dir, get_langcode(lang)), 'w+')
             self[lang] = f
             return f
 
@@ -81,7 +81,7 @@ class Extract:
         shutil.rmtree(self.tmp, ignore_errors=True)
 
 
-def get_langname(lang):
+def get_langcode(lang):
     lang_name = lang.part3
     if not lang_name:
         logging.debug("iso639-3 for lang '{}' not found.".format(lang.name))
@@ -91,19 +91,19 @@ def get_langname(lang):
     return lang_name
 
 
-def get_lang(lang_name):
+def get_lang(lang_code):
     try:
-        lang = iso639.languages.part3[lang_name]
+        lang = iso639.languages.part3[lang_code]
     except KeyError:
         try:
-            logging.debug("Reconstructing lang from iso639-3 '{}' failed.".format(lang_name))
-            lang = iso639.languages.retired[lang_name]
+            logging.debug("Reconstructing lang from iso639-3 '{}' failed.".format(lang_code))
+            lang = iso639.languages.retired[lang_code]
         except KeyError:
-            logging.debug("Reconstructing lang from iso639-3 retired '{}' failed.".format(lang_name))
+            logging.debug("Reconstructing lang from iso639-3 retired '{}' failed.".format(lang_code))
             try:
-                lang = iso639.languages.part2b[lang_name]
+                lang = iso639.languages.part2b[lang_code]
             except KeyError:
-                raise Exception("Reconstructing lang from iso639-2b '{}' failed.".format(lang_name))
+                raise Exception("Reconstructing lang from iso639-2b '{}' failed.".format(lang_code))
     return lang
 
 
@@ -159,10 +159,10 @@ def read(source):
     supported_corpora[source]
     path = os.path.join(corpora_dir, source)
     result = []
-    for lang_name in os.listdir(path):
+    for lang_code in os.listdir(path):
         obj = types.SimpleNamespace()
-        obj.lang = get_lang(lang_name)
-        obj.words = (word for word in open(os.path.join(path, lang_name), 'r'))
+        obj.lang = get_lang(lang_code)
+        obj.words = (word for word in open(os.path.join(path, lang_code), 'r'))
         result.append(obj)
     return result
 
