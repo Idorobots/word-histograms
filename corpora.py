@@ -1,14 +1,22 @@
-import babelfish
 import csv
 import getopt
+import gzip
+import iso639
 import logging
 import nltk
 import os
+import re
 import shutil
 import sys
 import tarfile
 import types
+import uuid
 import urllib.request
+
+try:
+    import xml.etree.cElementTree as ET
+except ImportError:
+    import xml.etree.ElementTree as ET
 
 
 class Corpora(dict):
@@ -21,13 +29,16 @@ class Corpora(dict):
 
 
 class LangFiles(dict):
+    def __init__(self, output_dir):
+        self.output_dir = output_dir
+
     def __getitem__(self, lang):
         try:
             return super(LangFiles, self).__getitem__(lang)
         except KeyError:
-            file = open(os.path.join(output_dir, lang.alpha3), 'a+')
-            self[lang] = file
-            return file
+            f = open(os.path.join(self.output_dir, get_langname(lang)), 'w+')
+            self[lang] = f
+            return f
 
     def __enter__(self):
         return self
@@ -37,73 +48,181 @@ class LangFiles(dict):
             file.close()
 
 
-def download(url, target_dir, output_name):
-    os.makedirs(target_dir, exist_ok=True)
-    filehandle = os.path.join(target_dir, output_name)
-    urllib.request.urlretrieve(url, filehandle)
-    return filehandle
+class Extract:
+    def __random_path(self, root):
+        return os.path.join(root, "."+uuid.uuid4().hex)
+
+    def __walk(self, root):
+        for name in os.listdir(root):
+            abs_path = os.path.join(root, name)
+            if (os.path.isdir(abs_path)):
+                self.__walk(abs_path)
+            elif (tarfile.is_tarfile(abs_path)):
+                tar = tarfile.open(abs_path)
+                path = self.__random_path(abs_path)
+                tar.extractall(path)
+                tar.close()
+                self.__walk(path)
+            elif (re.match(self.name_filter, abs_path)):
+                yield abs_path
+
+    def __init__(self, file, name_filter):
+        self.file = file
+        self.tmp = self.__random_path(cache_dir)
+        self.name_filter = name_filter
+
+    def __enter__(self):
+        tar = tarfile.open(self.file)
+        tar.extractall(self.tmp)
+        tar.close()
+        return self.__walk(self.tmp)
+
+    def __exit__(self, type, value, traceback):
+        shutil.rmtree(self.tmp, ignore_errors=True)
 
 
-def extract(filehandle, target_dir, clean=True):
-    tar = tarfile.open(filehandle)
-    tar.extractall(path=target_dir)
-    tar.close()
-    if clean:
-        os.remove(filehandle)
+def get_langname(lang):
+    lang_name = lang.part3
+    if not lang_name:
+        logging.debug("iso639-3 for lang '{}' not found.".format(lang.name))
+        lang_name = lang.part2b
+        if not lang_name:
+            raise Exception("iso639-2b for lang '{}' not found.".format(lang.name))
+    return lang_name
 
 
-def init(download_handler, preprocess_handler):
+def get_lang(lang_name):
+    try:
+        lang = iso639.languages.part3[lang_name]
+    except KeyError:
+        try:
+            logging.debug("Reconstructing lang from iso639-3 '{}' failed.".format(lang_name))
+            lang = iso639.languages.retired[lang_name]
+        except KeyError:
+            logging.debug("Reconstructing lang from iso639-3 retired '{}' failed.".format(lang_name))
+            try:
+                lang = iso639.languages.part2b[lang_name]
+            except KeyError:
+                raise Exception("Reconstructing lang from iso639-2b '{}' failed.".format(lang_name))
+    return lang
+
+
+def download(url, target):
+    urllib.request.urlretrieve(url, target)
+    return target
+
+
+def preprocess(source, name_filter, lang_files, handler):
+    with Extract(source, name_filter) as files:
+        for f in files:
+            handler(f, lang_files)
+
+
+def init(download_url, target_name, preprocess_handler, name_filter='.+'):
     obj = types.SimpleNamespace()
-    obj.download = download_handler
-    obj.preprocess = preprocess_handler
+    obj.url = download_url
+    obj.cache = os.path.join(cache_dir, target_name)
+    obj.download = lambda: download(url=obj.url, target=obj.cache)
+    obj.preprocess = lambda lang_files: preprocess(
+        source=obj.cache,
+        name_filter=name_filter,
+        lang_files=lang_files,
+        handler=preprocess_handler
+    )
     return obj
 
 
-def run(source, download_only=False, overwrite=False):
+def run_download(source):
     handler = supported_corpora[source]
-    source_dir = os.path.join(corpora_dir, source)
     logging.info("Downloading data for {}...".format(source))
-    handler.download(source_dir, overwrite)
-    if not download_only:
-        logging.info("Preprocessing data for {}...".format(source))
-        handler.preprocess()
+    handler.download()
+
+
+def run_preprocess(source):
+    handler = supported_corpora[source]
+    if (os.path.isfile(handler.cache)):
+        logging.info("Found cached data for {}".format(source))
+    else:
+        run_download(source)
+    logging.info("Preprocessing data for {}...".format(source))
+    output_dir = os.path.join(corpora_dir, source)
+    os.makedirs(output_dir, exist_ok=True)
+    with LangFiles(output_dir) as lang_files:
+        handler.preprocess(lang_files)
+
+
+def corpora():
+    return supported_corpora.keys()
+
+
+def read(source):
+    supported_corpora[source]
+    path = os.path.join(corpora_dir, source)
+    result = []
+    for lang_name in os.listdir(path):
+        obj = types.SimpleNamespace()
+        obj.lang = get_lang(lang_name)
+        obj.words = (word for word in open(os.path.join(path, lang_name), 'r'))
+        result.append(obj)
+    return result
 
 
 # corpora specific code
 
-def download_tatoeba(target_dir, overwrite=False):
-    if (not os.path.exists(os.path.join(target_dir, "sentences.csv"))) or overwrite:
-        filehandle = download(url="http://downloads.tatoeba.org/exports/sentences.tar.bz2",
-                              target_dir=target_dir,
-                              output_name="sentences.tar.bz2")
-        extract(filehandle=filehandle, target_dir=target_dir)
-
-
-def preprocess_tatoeba():
-    tatoeba_path = os.path.join(corpora_dir, "tatoeba/sentences.csv")
-    tatoeba_file = open(tatoeba_path)
-
-    with open(tatoeba_path) as tatoeba_file, LangFiles() as files:
-        sentences = csv.reader(tatoeba_file, delimiter='\t')
-        for sentence in sentences:
-            try:
-                lang = babelfish.Language(sentence[1])
-                filehandle = files[lang]
-                words = tokenizer.tokenize(sentence[2])
-                for word in words:
+def preprocess_bible(gzxmlfile, lang_files):
+    with gzip.open(gzxmlfile) as xmlfile:
+        tree = ET.fromstring(xmlfile.read())
+        lang = get_lang(tree.find('./cesHeader/profileDesc/langUsage/language').get('iso639'))
+        filehandle = lang_files[lang]
+        for verse in tree.findall('./text//seg[@type="verse"]'):
+            text = verse.text
+            if text is not None:
+                for word in tokenizer.tokenize(text):
                     print(word, file=filehandle)
-            except ValueError as err:
-                logging.debug("{}. Dropping sentence...".format(err))
+
+
+def preprocess_tatoeba(f, lang_files):
+    with open(f, 'r') as csvfile:
+        lines = csv.reader(csvfile, delimiter='\t')
+        for line in lines:
+            try:
+                lang = get_lang(line[1])
+                filehandle = lang_files[lang]
+                for word in tokenizer.tokenize(line[2]):
+                    print(word, file=filehandle)
+            except Exception as err:
+                logging.debug("{}. Dropping sentence.".format(err))
+
+
+# init module
+global cache_dir
+cache_dir = os.path.abspath(os.path.join(__file__, os.path.join(os.pardir, ".cache")))
+os.makedirs(cache_dir, exist_ok=True)
+
+global corpora_dir
+corpora_dir = os.path.abspath(os.path.join(__file__, os.path.join(os.pardir, "corpora")))
+os.makedirs(corpora_dir, exist_ok=True)
+
+global supported_corpora
+supported_corpora = Corpora([
+    ("bible", init(
+        download_url="http://homepages.inf.ed.ac.uk/s0787820/bible/XML_Bibles.tar.gz",
+        target_name="bibles.tar.gz",
+        preprocess_handler=preprocess_bible,
+        name_filter='^.+\.xml.gz$'
+    )),
+    ("tatoeba", init(
+        download_url="http://downloads.tatoeba.org/exports/sentences.tar.bz2",
+        target_name="tatoeba.tar.bz2",
+        preprocess_handler=preprocess_tatoeba,
+        name_filter='^.+\.csv$'
+    ))
+])
 
 
 if __name__ == "__main__":
-    options, args = getopt.getopt(sys.argv[1:], "", ["download=", "preprocess=", "output=", "debug"])
+    options, args = getopt.getopt(sys.argv[1:], "", ["download=", "preprocess=", "debug"])
     options = dict(options)
-
-    corpora_dir = os.path.abspath(os.path.join(__file__, os.path.join(os.pardir, "corpora")))
-    supported_corpora = Corpora(
-        [("tatoeba", init(download_tatoeba, preprocess_tatoeba))]
-    )
 
     logging_format = "%(levelname)s: %(message)s"
     if "--debug" in options:
@@ -111,28 +230,20 @@ if __name__ == "__main__":
     else:
         logging.basicConfig(format=logging_format, level=logging.INFO)
 
-    if "--output" in options:
-        output_dir = options["--output"]
-    else:
-        output_dir = os.path.join(corpora_dir, "output")
-
     if "--download" in options:
         source = options["--download"]
         if source == "all":
-            for key, handler in supported_corpora.items():
-                run(key, download_only=True, overwrite=True)
+            for key in supported_corpora.keys():
+                run_download(key)
         else:
-            run(source, download_only=True, overwrite=True)
+            run_download(source)
 
     if "--preprocess" in options:
-        if output_dir == os.path.join(corpora_dir, "output"):
-            shutil.rmtree(output_dir, ignore_errors=True)
         # nltk.download('punkt')
         tokenizer = nltk.tokenize.RegexpTokenizer('\w+')
-        os.makedirs(output_dir, exist_ok=True)
         source = options["--preprocess"]
         if source == "all":
             for key in supported_corpora.keys():
-                run(key, download_only=False, overwrite=False)
+                run_preprocess(key)
         else:
-            run(source, download_only=False, overwrite=False)
+            run_preprocess(source)
