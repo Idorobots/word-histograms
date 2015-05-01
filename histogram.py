@@ -1,22 +1,13 @@
 import getopt
 from hyphen import Hyphenator
 from hyphen import dictools
-import simplejson as json
+import json
+import logging
+import os.path
 import sys
 
 
-def install_language(language):
-    if not dictools.is_installed(language):
-        dictools.install(language)
-
-def inc(histogram, datum):
-    try:
-        histogram[datum] += 1
-
-    except KeyError:
-        histogram[datum] = 1
-
-def compute_length_histograms(word_gen):
+def histograms(word_gen):
     words = {}
     all_lengths = {}
     unique_lengths = {}
@@ -30,62 +21,76 @@ def compute_length_histograms(word_gen):
 
         inc(words, word)
 
-    return words, all_lengths, unique_lengths
+    return words, normalize(all_lengths), normalize(unique_lengths)
+
+def inc(histogram, datum):
+    try:
+        histogram[datum] += 1
+
+    except KeyError:
+        histogram[datum] = 1
+
+def normalize(d):
+    frequency_sum = 0
+    for k in d:
+        frequency_sum += d[k]
+
+    return {k: d[k]/frequency_sum for k in d}
 
 def by_word(input_file):
-    for word in input_file:
+    for word in open(input_file):
         yield word.strip().lower()
 
-def by_syllable(input_file, hyphenator):
-    for word in input_file:
-        for syllable in hyphenator.syllables(word.strip().lower()):
+def by_syllable(input_file, install_lang_p):
+    lang = os.path.basename(input_file)
+
+    if install_lang_p and not dictools.is_installed(language):
+        dictools.install(lang)
+
+    hyphenator = Hyphenator(lang)
+
+    for word in open(input_file):
+        word = word.strip().lower()
+        syllables = hyphenator.syllables(word)
+        logging.debug("{} syllables: {}".format(word, syllables))
+        for syllable in syllables:
             yield syllable
 
 if __name__ == "__main__":
-    options, args = getopt.getopt(sys.argv[1:], "", ["input=", "output=",
-                                                     "lang=", "install",
-                                                     "syllables", "list"])
+    options, args = getopt.getopt(sys.argv[1:], "", ["output-suffix=",
+                                                     "install", "syllables",
+                                                     "list",
+                                                     "debug"])
     options = dict(options)
 
-    input_file = sys.stdin
+    words_gen = by_word
 
-    if "--input" in options:
-        input_file = open(options["--input"])
-
-    words = []
+    logging_format = "%(levelname)s: %(message)s"
+    if "--debug" in options:
+        logging.basicConfig(format=logging_format, level=logging.DEBUG)
+    else:
+        logging.basicConfig(format=logging_format, level=logging.INFO)
 
     if "--syllables" in options:
-        if "--lang" not in options:
-            raise Exception("You must supply --lang option in order to use syllables!")
+        words_gen = lambda input_file: by_syllable(input_file, "--install" in options)
 
-        if "--install" in options:
-            install_language(options["--lang"])
+    for input_file in args:
+        all_words, all_lengths, unique_lengths = histograms(words_gen(input_file))
 
-        hyphenator = Hyphenator(options["--lang"])
+        result = {"lengths" : all_lengths,
+                  "unique_lengths" : unique_lengths}
 
-        words = by_syllable(input_file, hyphenator)
+        if "--list" in options:
+            result["words"] = all_words
 
-    else:
-        words = by_word(input_file)
+        if "--output-suffix" in options:
+            output_file = input_file + options["--output-suffix"]
+            logging.info("Saving file {}.".format(output_file))
 
-    all_words, all_lengths, unique_lengths = compute_length_histograms(words)
+            with open(output_file, "w") as out:
+                out.write(json.dumps(result))
 
-    total = 0
-    for word in all_words:
-        total += all_words[word]
-
-    print("total words:   ", total)
-    print("unique words:  ", len(all_words))
-    print("lengths:       ", all_lengths)
-    print("unique lengths:", unique_lengths)
-
-    if "--list" in options:
-        print("frequencies:   ", all_words)
-
-    if "--output" in options:
-        with open(options["--output"], "w") as out:
-            out.write(json.dumps({"all_lengths" : all_lengths,
-                                  "unique_lengths" : unique_lengths,
-                                  "all_words" : all_words},
-                                 sort_keys = True,
-                                 indent = 4 * " "))
+        else:
+            print(input_file + ":")
+            for k in sorted(result):
+                print(k + ":", result[k])

@@ -4,12 +4,13 @@ import math
 import simplejson as json
 import sys
 
+
 def key_transform(d):
     return {int(k): d[k] for k in d}
 
 def load_language_file(filename):
     data = json.loads(open(filename).read())
-    return data["all_words"], key_transform(data["all_lengths"]), key_transform(data["unique_lengths"])
+    return key_transform(data["lengths"]), key_transform(data["unique_lengths"])
 
 def value_or_0(d, key):
     try:
@@ -18,17 +19,7 @@ def value_or_0(d, key):
     except KeyError:
         return 0
 
-def normalize(d):
-    frequency_sum = 0
-    for k in d:
-        frequency_sum += d[k]
-
-    return {k: d[k]/frequency_sum for k in d}
-
 def compute_similarity(a, b):
-    a = normalize(a)
-    b = normalize(b)
-
     union = a.copy()
     union.update(b)
 
@@ -52,7 +43,7 @@ if __name__ == "__main__":
     if "--input" in options:
         input_file = open(options["--input"])
 
-    _, all_text, unique_text = histogram.compute_length_histograms(histogram.by_word(input_file))
+    _, all_text, unique_text = histogram.histograms(histogram.by_word(input_file))
 
     f = "{:>30}{:>30}{:>30}"
     print(f.format("language", "full similarity", "unique similarity"))
