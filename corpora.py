@@ -151,12 +151,14 @@ def run_preprocess(source):
         handler.preprocess(lang_files)
 
 
-def corpora():
-    return supported_corpora.keys()
+def get_supported_corpora():
+    return [corpora for corpora in os.listdir(corpora_dir)]
 
 
-def read(source):
+def read_corpora(source):
     supported_corpora[source]
+    if source not in get_supported_corpora():
+        raise Exception("Preprocessed data not found. Please run `python corpora.py --preprocess={}`".format(source))
     path = os.path.join(corpora_dir, source)
     result = []
     for lang_code in os.listdir(path):
