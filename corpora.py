@@ -3,6 +3,7 @@ import getopt
 import gzip
 import iso639
 import logging
+import multiprocessing as mp
 import nltk
 import os
 import re
@@ -134,29 +135,31 @@ def init(download_url, target_name, preprocess_handler, name_filter='.+'):
 
 def run_download(source):
     handler = supported_corpora[source]
-    logging.info("Downloading data for {}...".format(source))
+    logging.info("Downloading data for '{}'...".format(source))
     handler.download()
+    logging.info("Data for '{}' downloaded.".format(source))
 
 
 def run_preprocess(source):
     handler = supported_corpora[source]
     if (os.path.isfile(handler.cache)):
-        logging.info("Found cached data for {}".format(source))
+        logging.info("Found cached data for '{}'.".format(source))
     else:
         run_download(source)
-    logging.info("Preprocessing data for {}...".format(source))
+    logging.info("Preprocessing data for '{}'...".format(source))
     output_dir = os.path.join(corpora_dir, source)
     os.makedirs(output_dir, exist_ok=True)
     with LangFiles(output_dir) as lang_files:
         handler.preprocess(lang_files)
+    logging.info("Data for '{}' preprocessed.".format(source))
 
 
 def get_supported_corpora():
-    return [corpora for corpora in os.listdir(corpora_dir)]
+    return supported_corpora.keys()
 
 
 def read_corpora(source):
-    if source not in get_supported_corpora():
+    if source not in os.listdir(corpora_dir):
         run_preprocess(source)
     path = os.path.join(corpora_dir, source)
     result = []
@@ -225,17 +228,22 @@ if __name__ == "__main__":
     options, args = getopt.getopt(sys.argv[1:], "", ["download=", "preprocess=", "debug"])
     options = dict(options)
 
-    logging_format = "%(levelname)s: %(message)s"
+    datefmt = "%Y-%m-%d %H:%M:%S"
+    fmt = "%(asctime)s %(levelname)s in %(processName)s: %(message)s"
     if "--debug" in options:
-        logging.basicConfig(format=logging_format, level=logging.DEBUG)
+        logging.basicConfig(format=fmt, datefmt=datefmt, level=logging.DEBUG)
     else:
-        logging.basicConfig(format=logging_format, level=logging.INFO)
+        logging.basicConfig(format=fmt, datefmt=datefmt, level=logging.INFO)
+
+    processes = []
 
     if "--download" in options:
         source = options["--download"]
         if source == "all":
             for key in supported_corpora.keys():
-                run_download(key)
+                p = mp.Process(target=run_download, args=(key,), name="Process-"+key)
+                processes.append(p)
+                p.start()
         else:
             run_download(source)
 
@@ -245,6 +253,11 @@ if __name__ == "__main__":
         source = options["--preprocess"]
         if source == "all":
             for key in supported_corpora.keys():
-                run_preprocess(key)
+                p = mp.Process(target=run_preprocess, args=(key,), name="Process-"+key)
+                processes.append(p)
+                p.start()
         else:
             run_preprocess(source)
+
+    for p in processes:
+        p.join()
