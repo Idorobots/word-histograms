@@ -31,7 +31,8 @@ def histograms(word_gen):
 
         inc(words, word)
 
-    return words, normalize(all_lengths), normalize(unique_lengths)
+    return words, {"lengths" : normalize(all_lengths),
+                   "unique_lengths": normalize(unique_lengths)}
 
 def inc(histogram, datum):
     try:
@@ -75,7 +76,6 @@ def read_files(files, word_gen):
 if __name__ == "__main__":
     options, args = getopt.getopt(sys.argv[1:], "", ["output-dir=",
                                                      "install", "syllables",
-                                                     "list",
                                                      "debug"])
     options = dict(options)
 
@@ -95,13 +95,7 @@ if __name__ == "__main__":
     if "--output-dir" in options and not os.path.isdir(options["--output-dir"]):
         os.makedirs(options["--output-dir"])
 
-    for lang, all_words, all_lengths, unique_lengths in all_histograms(read_files(args, word_gen)):
-        result = {"lengths" : all_lengths,
-                  "unique_lengths" : unique_lengths}
-
-        if "--list" in options:
-            result["words"] = all_words
-
+    for lang, _, result in all_histograms(read_files(args, word_gen)):
         if "--output-dir" in options:
             output_file = os.path.join(options["--output-dir"], get_langcode(lang) + ".json")
             logging.info("Saving file {}.".format(output_file))
