@@ -8,5 +8,5 @@ Usage:
 ```
 python corpora.py --preprocess bible
 python histogram.py --output-dir histograms/bible corpora/bible/*
-python similarity.py --input input.txt en.json pl.json es.json
+python similarity.py --input unknown.txt histograms/bible/*
 ```

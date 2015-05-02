@@ -19,7 +19,7 @@ def value_or_0(d, key):
     except KeyError:
         return 0
 
-def compute_similarity(a, b):
+def similarity(a, b):
     union = a.copy()
     union.update(b)
 
@@ -32,23 +32,43 @@ def compute_similarity(a, b):
     return math.sqrt(coefficient)
 
 if __name__ == "__main__":
-    options, args = getopt.getopt(sys.argv[1:], "", ["input="])
+    options, args = getopt.getopt(sys.argv[1:], "", ["input=", "unique-weight=", "full-weight="])
     options = dict(options)
 
     if len(args) == 0:
-        raise Exception("At least language file is required!")
+        raise Exception("At least one language file is required!")
 
     input_file = sys.stdin
 
     if "--input" in options:
         input_file = open(options["--input"])
 
+    # Weights
+    full_weight = 1.0
+    if "--full-weight" in options:
+        full_weight = float(options["--full-weight"])
+
+    unique_weight = 0.25
+    if "--unique-weight" in options:
+        unique_weight = float(options["--unique-weight"])
+
     _, all_text, unique_text = histogram.histograms(histogram.by_word(input_file))
 
-    f = "{:>30}{:>30}{:>30}"
-    print(f.format("language", "full similarity", "unique similarity"))
+    scores = {}
+
     for lang in args:
-        _, all_lang, unique_lang = load_language_file(lang)
-        print(f.format(lang,
-                       compute_similarity(all_text, all_lang),
-                       compute_similarity(unique_text, unique_lang)))
+        all_lang, unique_lang = load_language_file(lang)
+        score_all = similarity(all_text, all_lang)
+        score_unique = similarity(unique_text, unique_lang)
+        score = score_all * full_weight + score_unique * unique_weight
+        scores[lang] = (score, score_all, score_unique)
+
+    f = "{:<30}{:<30}{:<30}{:<30}"
+    print(f.format("language",
+                   "full similarity * " + str(full_weight),
+                   "unique similarity * " + str(unique_weight),
+                   "score"))
+
+    for lang in sorted(scores, key = lambda k: scores[k][0]):
+        score, score_all, score_unique = scores[lang]
+        print(f.format(lang, score_all, score_unique, score))
