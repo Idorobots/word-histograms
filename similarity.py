@@ -1,7 +1,7 @@
 import getopt
 import histogram
+import json
 import math
-import simplejson as json
 import sys
 
 
@@ -10,7 +10,9 @@ def key_transform(d):
 
 def load_language_file(filename):
     data = json.loads(open(filename).read())
-    return key_transform(data["lengths"]), key_transform(data["unique_lengths"])
+    result = {k: key_transform(data[k]) for k in data}
+    result["filename"] = filename
+    return result
 
 def value_or_0(d, key):
     try:
@@ -31,8 +33,26 @@ def similarity(a, b):
 
     return math.sqrt(coefficient)
 
+def match(cypher_histogram, lang_histograms, weights):
+    scores = {}
+    for histo in lang_histograms:
+        filename = histo["filename"]
+        del histo["filename"]
+
+        score = {}
+        total_score = 0
+
+        for metric in histo:
+            s = similarity(cypher_histogram[metric], histo[metric])
+            score[metric] = s
+            total_score += s * value_or_0(weights, metric)
+
+        score["score"] = total_score
+        scores[filename] = score
+    return scores
+
 if __name__ == "__main__":
-    options, args = getopt.getopt(sys.argv[1:], "", ["input=", "unique-weight=", "full-weight="])
+    options, args = getopt.getopt(sys.argv[1:], "", ["input=", "output=", "weights="])
     options = dict(options)
 
     if len(args) == 0:
@@ -43,32 +63,23 @@ if __name__ == "__main__":
     if "--input" in options:
         input_file = open(options["--input"])
 
-    # Weights
-    full_weight = 1.0
-    if "--full-weight" in options:
-        full_weight = float(options["--full-weight"])
+    weights = {"lengths" : 1, "unique_lengths": 0.25}
+    if "--weights" in options:
+        weights = json.loads(options["--weights"])
 
-    unique_weight = 0.25
-    if "--unique-weight" in options:
-        unique_weight = float(options["--unique-weight"])
+    _, histo = histogram.histograms(histogram.by_word(input_file))
+    scores = match(histo, (load_language_file(lang) for lang in args), weights)
 
-    _, all_text, unique_text = histogram.histograms(histogram.by_word(input_file))
+    if "--output" in options:
+        with open(options["--output"], "w") as out:
+            out.write(json.dumps(scores))
 
-    scores = {}
+    else:
+        f = "{:<30}" + "{:<20}" * (len(histo) + 1)
+        columns = sorted(histo.keys())
 
-    for lang in args:
-        all_lang, unique_lang = load_language_file(lang)
-        score_all = similarity(all_text, all_lang)
-        score_unique = similarity(unique_text, unique_lang)
-        score = score_all * full_weight + score_unique * unique_weight
-        scores[lang] = (score, score_all, score_unique)
+        print(f.format("language", "score", *columns))
 
-    f = "{:<30}{:<30}{:<30}{:<30}"
-    print(f.format("language",
-                   "full similarity * " + str(full_weight),
-                   "unique similarity * " + str(unique_weight),
-                   "score"))
-
-    for lang in sorted(scores, key = lambda k: scores[k][0]):
-        score, score_all, score_unique = scores[lang]
-        print(f.format(lang, score_all, score_unique, score))
+        for lang in sorted(scores, key = lambda k: scores[k]["score"]):
+            s = [scores[lang][column] for column in columns]
+            print(f.format(lang, scores[lang]["score"], *s))
