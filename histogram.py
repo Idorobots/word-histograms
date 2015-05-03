@@ -11,28 +11,49 @@ import types
 
 def all_histograms(word_gens):
     for obj in word_gens:
-        result = histograms(obj.words)
-        yield pack(obj.lang, *result)
-
-def pack(*args):
-    return args
+        yield obj.lang, histograms(obj.words)
 
 def histograms(word_gen):
-    words = {}
-    all_lengths = {}
+    one_gram_lengths = {}
+
+    two_gram_lengths = {}
+    last_length = 0
+
+    three_gram_lengths = {}
+    last_last_length = 0
+
     unique_lengths = {}
+    words = {}
 
     for word in word_gen:
         length = len(word)
-        inc(all_lengths, length)
 
+        # Mundane 1-gram lengths
+        inc(one_gram_lengths, length)
+
+        # 2-gram lengths
+        if last_length != 0:
+            inc(two_gram_lengths, (last_length, length))
+
+        # 3-gram lengths
+        if last_last_length != 0:
+            inc(three_gram_lengths, (last_last_length, last_length, length))
+
+        last_last_length = last_length
+        last_length = length
+
+        # Unique lengths
         if word not in words:
+            words[word] = True
             inc(unique_lengths, length)
 
-        inc(words, word)
+    return {"1-gram lengths" : key_transform(normalize(one_gram_lengths), str),
+            "2-gram lengths" : key_transform(normalize(two_gram_lengths), str),
+            "3-gram lengths" : key_transform(normalize(three_gram_lengths), str),
+            "unique lengths" : key_transform(normalize(unique_lengths), str)}
 
-    return words, {"lengths" : normalize(all_lengths),
-                   "unique_lengths": normalize(unique_lengths)}
+def key_transform(d, f):
+    return {f(k): d[k] for k in d}
 
 def inc(histogram, datum):
     try:
@@ -95,7 +116,7 @@ if __name__ == "__main__":
     if "--output-dir" in options and not os.path.isdir(options["--output-dir"]):
         os.makedirs(options["--output-dir"])
 
-    for lang, _, result in all_histograms(read_files(args, word_gen)):
+    for lang, result in all_histograms(read_files(args, word_gen)):
         if "--output-dir" in options:
             output_file = os.path.join(options["--output-dir"], get_langcode(lang) + ".json")
             logging.info("Saving file {}.".format(output_file))
