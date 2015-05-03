@@ -11,11 +11,7 @@ import types
 
 def all_histograms(word_gens):
     for obj in word_gens:
-        result = histograms(obj.words)
-        yield pack(obj.lang, *result)
-
-def pack(*args):
-    return args
+        yield obj.lang, histograms(obj.words)
 
 def histograms(word_gen):
     words = {}
@@ -27,12 +23,14 @@ def histograms(word_gen):
         inc(all_lengths, length)
 
         if word not in words:
+            words[word] = True
             inc(unique_lengths, length)
 
-        inc(words, word)
+    return {"lengths" : key_transform(normalize(all_lengths), str),
+            "unique_lengths": key_transform(normalize(unique_lengths), str)}
 
-    return words, {"lengths" : normalize(all_lengths),
-                   "unique_lengths": normalize(unique_lengths)}
+def key_transform(d, f):
+    return {f(k): d[k] for k in d}
 
 def inc(histogram, datum):
     try:
@@ -95,7 +93,7 @@ if __name__ == "__main__":
     if "--output-dir" in options and not os.path.isdir(options["--output-dir"]):
         os.makedirs(options["--output-dir"])
 
-    for lang, _, result in all_histograms(read_files(args, word_gen)):
+    for lang, result in all_histograms(read_files(args, word_gen)):
         if "--output-dir" in options:
             output_file = os.path.join(options["--output-dir"], get_langcode(lang) + ".json")
             logging.info("Saving file {}.".format(output_file))

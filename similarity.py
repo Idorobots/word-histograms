@@ -5,21 +5,20 @@ import math
 import sys
 
 
-def key_transform(d):
-    return {int(k): d[k] for k in d}
+def match(cypher_histogram, lang_histograms, weights):
+    scores = {}
+    for lang, histo in lang_histograms:
+        score = {}
+        total_score = 0
 
-def load_language_file(filename):
-    data = json.loads(open(filename).read())
-    result = {k: key_transform(data[k]) for k in data}
-    result["filename"] = filename
-    return result
+        for metric in histo:
+            s = similarity(cypher_histogram[metric], histo[metric])
+            score[metric] = s
+            total_score += s * value_or_0(weights, metric)
 
-def value_or_0(d, key):
-    try:
-        return d[key]
-
-    except KeyError:
-        return 0
+        score["score"] = total_score
+        scores[lang] = score
+    return scores
 
 def similarity(a, b):
     union = a.copy()
@@ -33,23 +32,16 @@ def similarity(a, b):
 
     return math.sqrt(coefficient)
 
-def match(cypher_histogram, lang_histograms, weights):
-    scores = {}
-    for histo in lang_histograms:
-        filename = histo["filename"]
-        del histo["filename"]
+def value_or_0(d, key):
+    try:
+        return d[key]
 
-        score = {}
-        total_score = 0
+    except KeyError:
+        return 0
 
-        for metric in histo:
-            s = similarity(cypher_histogram[metric], histo[metric])
-            score[metric] = s
-            total_score += s * value_or_0(weights, metric)
-
-        score["score"] = total_score
-        scores[filename] = score
-    return scores
+def load_language_file(filename):
+    with open(filename) as data:
+         return filename, json.loads(data.read())
 
 if __name__ == "__main__":
     options, args = getopt.getopt(sys.argv[1:], "", ["input=", "output=", "weights="])
@@ -67,8 +59,8 @@ if __name__ == "__main__":
     if "--weights" in options:
         weights = json.loads(options["--weights"])
 
-    _, histo = histogram.histograms(histogram.by_word(input_file))
-    scores = match(histo, (load_language_file(lang) for lang in args), weights)
+    histo = histogram.histograms(histogram.by_word(input_file))
+    scores = match(histo, [load_language_file(lang) for lang in args], weights)
 
     if "--output" in options:
         with open(options["--output"], "w") as out:
