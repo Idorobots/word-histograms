@@ -14,20 +14,43 @@ def all_histograms(word_gens):
         yield obj.lang, histograms(obj.words)
 
 def histograms(word_gen):
-    words = {}
-    all_lengths = {}
+    one_gram_lengths = {}
+
+    two_gram_lengths = {}
+    last_length = 0
+
+    three_gram_lengths = {}
+    last_last_length = 0
+
     unique_lengths = {}
+    words = {}
 
     for word in word_gen:
         length = len(word)
-        inc(all_lengths, length)
 
+        # Mundane 1-gram lengths
+        inc(one_gram_lengths, length)
+
+        # 2-gram lengths
+        if last_length != 0:
+            inc(two_gram_lengths, (last_length, length))
+
+        # 3-gram lengths
+        if last_last_length != 0:
+            inc(three_gram_lengths, (last_last_length, last_length, length))
+
+        last_last_length = last_length
+        last_length = length
+
+        # Unique lengths
         if word not in words:
             words[word] = True
             inc(unique_lengths, length)
 
-    return {"lengths" : key_transform(normalize(all_lengths), str),
-            "unique_lengths": key_transform(normalize(unique_lengths), str)}
+    return {"1-gram lengths" : key_transform(normalize(one_gram_lengths), str),
+            "2-gram lengths" : key_transform(normalize(two_gram_lengths), str),
+            "3-gram lengths" : key_transform(normalize(three_gram_lengths), str),
+            "unique lengths" : key_transform(normalize(unique_lengths), str)}
 
 def key_transform(d, f):
     return {f(k): d[k] for k in d}

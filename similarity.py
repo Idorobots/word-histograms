@@ -55,7 +55,11 @@ if __name__ == "__main__":
     if "--input" in options:
         input_file = open(options["--input"])
 
-    weights = {"lengths" : 1, "unique_lengths": 0.25}
+    weights = {"1-gram lengths" : 1,
+               "2-gram lengths" : 0.5,
+               "3-gram lengths" : 0.25,
+               "unique lengths" : 0.1}
+
     if "--weights" in options:
         weights = json.loads(options["--weights"])
 
