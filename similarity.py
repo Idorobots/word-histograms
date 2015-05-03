@@ -71,7 +71,7 @@ if __name__ == "__main__":
             out.write(json.dumps(scores))
 
     else:
-        f = "{:<30}" + "{:<20}" * (len(histo) + 1)
+        f = "{:<29}" + "{:<20} " * (len(histo) + 1)
         columns = sorted(histo.keys())
 
         print(f.format("language", "score", *columns))
