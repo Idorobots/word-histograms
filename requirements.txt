@@ -1,3 +1,4 @@
 PyHyphen==2.0.5
 nltk==3.0.2
 git+https://github.com/noumar/iso639.git@0.4.1
+matplotlib==1.4.3
