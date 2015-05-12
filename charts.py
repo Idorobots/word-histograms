@@ -24,11 +24,11 @@ if __name__ == '__main__':
 
     fig, ax = plt.subplots()
 
-    bar1 = ax.bar(xs, ys, 0.3, alpha = 0.4, color = 'b', label = 'Similarity')
+    bar1 = ax.bar(xs, ys, 0.8, alpha = 0.4, color = 'b', label = 'Similarity')
     ax.set_xlabel('Language')
     ax.set_ylabel('Score')
     ax.set_title(title)
-    ax.set_xticks(xs + 0.3)
+    ax.set_xticks(xs + 0.8)
     ax.set_xticklabels(langs_abbr, rotation = 90)
 
     plt.tight_layout()
